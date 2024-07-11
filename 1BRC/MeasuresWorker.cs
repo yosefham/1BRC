@@ -24,7 +24,7 @@ public class MeasuresWorker
     {
         await foreach (string s in ReadFile(_measurementFile))
         {
-            (string name, decimal measure) = ProcessLines(s);
+            (string name, decimal measure) = await ProcessLines2(s);
             measures.AddOrUpdate(name,
                 _ => new Measures(measure, (long)measure, measure, 1),
                 (_, m) =>
@@ -58,6 +58,34 @@ public class MeasuresWorker
     
     }
 
+
+    async Task<(string, decimal)> ProcessLines2(string s)
+    {
+        string[] words;
+        await foreach (string line in GetSubstring(s, '\n'))
+        {
+            words = line.Split(";");
+            decimal.TryParse(words[1], out var measure);
+            return (words[0], measure);
+        }
+
+        return (string.Empty, 0);
+    }
+
+
+    async IAsyncEnumerable<string> GetSubstring(string s, char splitter)
+    {
+        int lastIndex = 0;
+        for (int i = 0; i < s.Length; i++)
+        {
+            if (s[i] == splitter)
+            {
+                yield return s[lastIndex..i];
+                lastIndex = i+1;
+            }
+        }
+    }
+    
     (string, decimal) ProcessLines(string s)
     {
         var lines = s.Split('\n');
