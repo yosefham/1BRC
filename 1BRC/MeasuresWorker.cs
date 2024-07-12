@@ -1,31 +1,28 @@
 using System.Collections.Concurrent;
 using System.Text;
 using BenchmarkDotNet.Attributes;
+using Microsoft.Win32.SafeHandles;
 
 namespace _1BRC;
 
-public class MeasuresWorker
+[SimpleJob(launchCount:0, warmupCount:0, iterationCount:5)]
+public  class MeasuresWorker
 {
     // private readonly int _bufferLength;
-    [Params(256*512,512*512,1024*1024,2048*1024,2048*2048)]
-    public int _bufferLength { get; set; }
-    
-    private readonly string _measurementFile = "./measurements-1_000_000-sample.txt";
-    // ConcurrentDictionary<string, Measures> measures = new ();
+    [Params(128 * 128, 128 * 256, 256 * 256, 256 * 512, 512 * 512)]
+    public int BufferLength { get; set; } = 256 * 265;
 
-    public MeasuresWorker(string measurementFile, int bufferLength = 512*512)
+    public string MeasurementFile { get; set; } = "C:/source/Personal/1BRC/1BRC/bin/measurements.txt";
+    ConcurrentDictionary<string, Measures> measures = new ();
+
+
+    [Benchmark]
+    public async Task Process()
     {
-        _measurementFile = measurementFile;
-        _bufferLength = bufferLength;
-    }
-    
-    public async Task Process(ConcurrentDictionary<string, Measures> measures)
-    // [Benchmark]
-    // public async Task Process()
-    {
-        await foreach (string s in ReadFile(_measurementFile))
+        await foreach (Memory<byte> s in ReadBuffer(MeasurementFile).ConfigureAwait(false))
         {
-            (string name, decimal measure) = await ProcessLines(s);
+            (Memory<byte> byteName, decimal measure) = await ProcessLines(s);
+            string name = Encoding.UTF8.GetString(byteName.Span);
             measures.AddOrUpdate(name,
                 _ => new Measures(measure, (long)measure, measure, 1),
                 (_, m) =>
@@ -37,59 +34,55 @@ public class MeasuresWorker
                     return new Measures(min, (long)sum, max, count);
                 });
         }
+
+        foreach (var measure in measures)
+        {
+            var val = measure.Value;
+            Console.WriteLine($"{measure.Key}={val.Min}/{val.Sum / val.Count}/{val.Max}");
+        }
     }
 
-    async IAsyncEnumerable<Memory<byte>> ReadBuffer(string filePath)
-    {
-        var file = File.OpenRead(filePath);
-        byte[] buffer = new byte[_bufferLength];
-        Memory<byte> copy = Memory<byte>.Empty;
-        
-        while (await file.ReadAsync(buffer) > 0)
-            yield return new Memory<byte>(buffer);
-    }
-    
-    //improve by reading and processing simultaneously
-    async IAsyncEnumerable<string> ReadFile(string filePath)
-    {
-        string pending = String.Empty;
-        await foreach(var copy in ReadBuffer(filePath).ConfigureAwait(false))
+        async IAsyncEnumerable<Memory<byte>> ReadBuffer(string filePath)
         {
-            var s = pending + Encoding.UTF8.GetString(copy.Span);
-            var lastIndexOf = s.LastIndexOf('\n');
-            lastIndexOf++;
-            pending = s[lastIndexOf..];
-            yield return s[..lastIndexOf];
+            byte[] buffer = new byte[BufferLength];
+            using SafeFileHandle file = File.OpenHandle(MeasurementFile);
+            long index = 0;
+            while (RandomAccess.Read(file, buffer, index) > 0)
+            {
+                var lastIndexOf = buffer.AsSpan().LastIndexOf((byte)'\n') + 1; 
+                index += lastIndexOf;
+                yield return new Memory<byte>(buffer[..lastIndexOf]);
+            }
         }
     
-    }
 
-
-    async Task<(string, decimal)> ProcessLines(string s)
+    async Task<(Memory<byte>, decimal)> ProcessLines(Memory<byte> s)
     {
-        string[] words;
-        await foreach (string line in GetSubstring(s, '\n'))
+        await foreach (var line in GetSubstring(s,(byte)'\n').ConfigureAwait(false))
         {
-            words = line.Split(";");
-            decimal.TryParse(words[1], out var measure);
-            return (words[0], measure);
+            var indexOfSplitter = line.Span.LastIndexOf((byte)';');
+            decimal.TryParse(line.Span[(indexOfSplitter+1)..], out var measure);
+            return (line[..indexOfSplitter], measure);
         }
 
-        return (string.Empty, 0);
+        return (Memory<byte>.Empty, 0);
     }
 
 
-    async IAsyncEnumerable<string> GetSubstring(string s, char splitter)
+    async IAsyncEnumerable<Memory<byte>> GetSubstring(Memory<byte> s, byte splitter)
     {
         int lastIndex = 0;
-        for (int i = 0; i < s.Length; i++)
+        int nextIndex = 0; 
+        for (int i = 0; i < s.Span.Length; i++)
         {
-            if (s[i] == splitter)
+            if (s.Span[i] == splitter)
             {
+                lastIndex = nextIndex;
+                nextIndex = i + 1;
                 yield return s[lastIndex..i];
-                lastIndex = i+1;
             }
         }
     }
 
 }
+public record Measures(decimal Min, long Sum, decimal Max, int Count);
