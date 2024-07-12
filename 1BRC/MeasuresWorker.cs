@@ -7,24 +7,25 @@ namespace _1BRC;
 public class MeasuresWorker
 {
     // private readonly int _bufferLength;
-    // [Params(1024,128*128,128*256,256*256,256*512,512*512,1024*1024)]
+    [Params(256*512,512*512,1024*1024,2048*1024,2048*2048)]
     public int _bufferLength { get; set; }
     
     private readonly string _measurementFile = "./measurements-1_000_000-sample.txt";
     // ConcurrentDictionary<string, Measures> measures = new ();
 
-    public MeasuresWorker(string measurementFile, int bufferLength = 128*128)
+    public MeasuresWorker(string measurementFile, int bufferLength = 512*512)
     {
         _measurementFile = measurementFile;
         _bufferLength = bufferLength;
     }
     
-    // [Benchmark]
     public async Task Process(ConcurrentDictionary<string, Measures> measures)
+    // [Benchmark]
+    // public async Task Process()
     {
         await foreach (string s in ReadFile(_measurementFile))
         {
-            (string name, decimal measure) = await ProcessLines2(s);
+            (string name, decimal measure) = await ProcessLines(s);
             measures.AddOrUpdate(name,
                 _ => new Measures(measure, (long)measure, measure, 1),
                 (_, m) =>
@@ -37,18 +38,23 @@ public class MeasuresWorker
                 });
         }
     }
-    
-    async IAsyncEnumerable<string> ReadFile(string filePath)
+
+    async IAsyncEnumerable<Memory<byte>> ReadBuffer(string filePath)
     {
         var file = File.OpenRead(filePath);
         byte[] buffer = new byte[_bufferLength];
         Memory<byte> copy = Memory<byte>.Empty;
-    
-        string pending = String.Empty;
-        while (await file.ReadAsync(buffer) > 0)
-        {
-            copy = new Memory<byte>(buffer);
         
+        while (await file.ReadAsync(buffer) > 0)
+            yield return new Memory<byte>(buffer);
+    }
+    
+    //improve by reading and processing simultaneously
+    async IAsyncEnumerable<string> ReadFile(string filePath)
+    {
+        string pending = String.Empty;
+        await foreach(var copy in ReadBuffer(filePath).ConfigureAwait(false))
+        {
             var s = pending + Encoding.UTF8.GetString(copy.Span);
             var lastIndexOf = s.LastIndexOf('\n');
             lastIndexOf++;
@@ -59,7 +65,7 @@ public class MeasuresWorker
     }
 
 
-    async Task<(string, decimal)> ProcessLines2(string s)
+    async Task<(string, decimal)> ProcessLines(string s)
     {
         string[] words;
         await foreach (string line in GetSubstring(s, '\n'))
@@ -85,19 +91,5 @@ public class MeasuresWorker
             }
         }
     }
-    
-    (string, decimal) ProcessLines(string s)
-    {
-        var lines = s.Split('\n');
-        foreach (var line in lines)
-        {
-            var words = line.Split(";");
-            decimal.TryParse(words[1], out var measure);
-            return (words[0], measure);
-        }
-
-        return (String.Empty, 0);
-    }
-
 
 }
