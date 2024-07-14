@@ -1,19 +1,3 @@
-/*
- *  Copyright 2023 The original authors
- *
- *  Licensed under the Apache License, Version 2.0 (the "License");
- *  you may not use this file except in compliance with the License.
- *  You may obtain a copy of the License at
- *
- *      http://www.apache.org/licenses/LICENSE-2.0
- *
- *  Unless required by applicable law or agreed to in writing, software
- *  distributed under the License is distributed on an "AS IS" BASIS,
- *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- *  See the License for the specific language governing permissions and
- *  limitations under the License.
- */
-
 using System.Text;
 
 namespace _1BRC;
@@ -28,35 +12,11 @@ public class CreateMeasurements {
         }
     }
 
-    public void CreateMesurementsFile(string filePath, int size) {
+    public async Task CreateMesurementsFile(string filePath, int size) {
         long start = System.DateTime.UtcNow.Millisecond;
         
-            // @formatter:off
-            // data from https://en.wikipedia.org/wiki/List_of_cities_by_average_temperature;
-            // converted using https://wikitable2csv.ggor.de/
-            // brought to form using DuckDB:
-            // D copy (
-            //     select City, regexp_extract(Year,'(.*)\n.*', 1) as AverageTemp
-            //     from (
-            //         select City,Year
-            //         from read_csv_auto('List_of_cities_by_average_temperature_1.csv', header = true)
-            //         union
-            //         select City,Year
-            //         from read_csv_auto('List_of_cities_by_average_temperature_2.csv', header = true)
-            //         union
-            //         select City,Year
-            //         from read_csv_auto('List_of_cities_by_average_temperature_3.csv', header = true)
-            //         union
-            //         select City,Year
-            //         from read_csv_auto('List_of_cities_by_average_temperature_4.csv', header = true)
-            //         union
-            //         select City,Year
-            //         from read_csv_auto('List_of_cities_by_average_temperature_5.csv', header = true)
-            //         )
-            // ) TO 'output.csv' (HEADER, DELIMITER ',');
-        // @formatter:on
-        List<WeatherStation> stations = new List<WeatherStation>()
-        {
+        List<WeatherStation> stations =
+        [
             new WeatherStation("Abha", 18.0),
             new WeatherStation("Abidjan", 26.0),
             new WeatherStation("Abéché", 29.4),
@@ -470,9 +430,9 @@ public class CreateMeasurements {
             new WeatherStation("Zagreb", 10.7),
             new WeatherStation("Zanzibar City", 26.0),
             new WeatherStation("Zürich", 9.3)
-        };
+        ];
 
-        using (var ws = File.OpenWrite(filePath))
+        await using (var ws = File.OpenWrite(filePath))
         {
             for (int i = 0; i < size; i++)
             {
@@ -482,7 +442,7 @@ public class CreateMeasurements {
                 WeatherStation station = stations[Random.Shared.Next(stations.Count)];
                 var buffer = Encoding.UTF8.GetBytes(station.Id + ";" + station.Measurement() + "\n");
                 
-                ws.WriteAsync(buffer);
+                await ws.WriteAsync(buffer);
             }
         }
 

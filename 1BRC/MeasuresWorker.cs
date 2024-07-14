@@ -13,7 +13,7 @@ public  class MeasuresWorker
     public int BufferLength { get; set; } = 256 * 265;
 
     public string MeasurementFile { get; set; } = "C:/source/Personal/1BRC/1BRC/bin/measurements.txt";
-    ConcurrentDictionary<string, Measures> measures = new ();
+    private readonly ConcurrentDictionary<string, Measures> _measures = new ();
 
 
     [Benchmark]
@@ -23,7 +23,7 @@ public  class MeasuresWorker
         {
             (Memory<byte> byteName, decimal measure) = await ProcessLines(s);
             string name = Encoding.UTF8.GetString(byteName.Span);
-            measures.AddOrUpdate(name,
+            _measures.AddOrUpdate(name,
                 _ => new Measures(measure, (long)measure, measure, 1),
                 (_, m) =>
                 {
@@ -35,25 +35,25 @@ public  class MeasuresWorker
                 });
         }
 
-        foreach (var measure in measures)
+        foreach (var measure in _measures)
         {
             var val = measure.Value;
             Console.WriteLine($"{measure.Key}={val.Min}/{val.Sum / val.Count}/{val.Max}");
         }
     }
 
-        async IAsyncEnumerable<Memory<byte>> ReadBuffer(string filePath)
+    private async IAsyncEnumerable<Memory<byte>> ReadBuffer(string filePath)
+    {
+        byte[] buffer = new byte[BufferLength];
+        using SafeFileHandle file = File.OpenHandle(filePath);
+        long index = 0;
+        while (RandomAccess.Read(file, buffer, index) > 0)
         {
-            byte[] buffer = new byte[BufferLength];
-            using SafeFileHandle file = File.OpenHandle(MeasurementFile);
-            long index = 0;
-            while (RandomAccess.Read(file, buffer, index) > 0)
-            {
-                var lastIndexOf = buffer.AsSpan().LastIndexOf((byte)'\n') + 1; 
-                index += lastIndexOf;
-                yield return new Memory<byte>(buffer[..lastIndexOf]);
-            }
+            var lastIndexOf = buffer.AsSpan().LastIndexOf((byte)'\n') + 1; 
+            index += lastIndexOf;
+            yield return new Memory<byte>(buffer[..lastIndexOf]);
         }
+    }
     
 
     async Task<(Memory<byte>, decimal)> ProcessLines(Memory<byte> s)
@@ -71,13 +71,12 @@ public  class MeasuresWorker
 
     async IAsyncEnumerable<Memory<byte>> GetSubstring(Memory<byte> s, byte splitter)
     {
-        int lastIndex = 0;
         int nextIndex = 0; 
         for (int i = 0; i < s.Span.Length; i++)
         {
             if (s.Span[i] == splitter)
             {
-                lastIndex = nextIndex;
+                var lastIndex = nextIndex;
                 nextIndex = i + 1;
                 yield return s[lastIndex..i];
             }

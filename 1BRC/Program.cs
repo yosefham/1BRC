@@ -1,12 +1,11 @@
 ﻿using System.Diagnostics;
 using _1BRC;
-using BenchmarkDotNet.Configs;
 using BenchmarkDotNet.Running;
 
 string measurementFile = "../../measurements.txt";
 // string measurementFile = "./measurements-1_000_000-sample.txt";
 
-// new CreateMeasurements().CreateMesurementsFile(measurementFile, 1_000_000_000);
+// await new CreateMeasurements().CreateMesurementsFile(measurementFile, 1_000_000_000);
 // return;
 
 // BenchmarkRunner.Run<FileReader>();
